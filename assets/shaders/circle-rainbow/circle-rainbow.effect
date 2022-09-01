@@ -1,0 +1,108 @@
+// Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.  
+
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: vs
+      frag: fs
+      blendState:
+        targets:
+        - blend: true
+      rasterizerState:
+        cullMode: none
+      properties:
+        texture: { value: white }
+        alphaThreshold: { value: 0.5 }
+}%
+
+
+CCProgram vs %{
+  precision highp float;
+
+  #include <cc-global>
+  #include <cc-local>
+
+  in vec3 a_position;
+  in vec4 a_color;
+  out vec4 v_color;
+
+  #if USE_TEXTURE
+  in vec2 a_uv0;
+  out vec2 v_uv0;
+  #endif
+
+  void main () {
+    vec4 pos = vec4(a_position, 1);
+
+    #if CC_USE_MODEL
+    pos = cc_matViewProj * cc_matWorld * pos;
+    #else
+    pos = cc_matViewProj * pos;
+    #endif
+
+    #if USE_TEXTURE
+    v_uv0 = a_uv0;
+    #endif
+
+    v_color = a_color;
+
+    gl_Position = pos;
+  }
+}%
+
+
+CCProgram fs %{
+  precision highp float;
+  
+  #include <alpha-test>
+
+  in vec4 v_color;
+
+  #if USE_TEXTURE
+  in vec2 v_uv0;
+  uniform sampler2D texture;
+  #endif
+
+  // 下面函数
+  float drawCircle(float raduis, float boarder, float dis) {
+    float newDis = smoothstep(raduis, raduis-boarder, dis);
+    return newDis;
+  }
+
+  float drawCircleLine(float raduis, float lineWidth, float boarder, float dis) {
+    float dis1 = drawCircle(raduis, boarder, dis);
+    float dis2 = drawCircle(raduis-lineWidth, boarder, dis);
+    return dis1 - dis2;
+  }
+
+  void main () {
+
+    vec4 o = vec4(0, 1, 0, 1);
+    vec2 point = vec2(0.5, 0);
+    float dis = distance(v_uv0, point);
+    // dis = step(dis, 0.5);
+    // dis = smoothstep(dis, 0.5, 0.01);
+
+    // float dis1 = step(dis, 0.5);
+    // float dis2 = step(dis, 0.4);
+
+    float dis1 = drawCircleLine(0.5, 0.1, 0.001, dis);
+    float dis2 = drawCircleLine(0.4, 0.1, 0.001, dis);
+    float dis3 = drawCircleLine(0.3, 0.1, 0.001, dis);
+    vec3 color_red = vec3(1, 0, 0);
+    vec3 color_green = vec3(0, 1, 0);
+    vec3 color_blue = vec3(0, 0, 1);
+
+    vec3 ret = dis1 * color_red + dis2 * color_green + dis3 * color_blue;
+
+    // float dis1 = drawCircle(0.5, 0.001, dis);
+    // float dis2 = drawCircle(0.4, 0.001, dis);
+    // dis = dis1 - dis2;
+    // dis = smoothstep(0.5, 0.5-0.001, dis);
+    // vec3 color = vec3(0, 1, 0);
+    vec4 color = vec4(ret, 1);
+    // o *= dis;
+      
+    gl_FragColor = color;
+  }
+}%

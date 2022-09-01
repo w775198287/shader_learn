@@ -1,2 +1,2 @@
-# shader_learn
-shader学习
+# hello-world
+Hello world new project template.

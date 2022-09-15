@@ -1,0 +1,28 @@
+{
+  "__type__": "cc.Material",
+  "_name": "",
+  "_objFlags": 0,
+  "_native": "",
+  "_effectAsset": {
+    "__uuid__": "3c351acd-2fc7-43ae-a118-ffd66d797be3"
+  },
+  "_defines": {
+    "USE_TEXTURE": true
+  },
+  "_props": {
+    "midColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 215,
+      "b": 74,
+      "a": 255
+    },
+    "botColor": {
+      "__type__": "cc.Color",
+      "r": 180,
+      "g": 86,
+      "b": 0,
+      "a": 255
+    }
+  }
+}

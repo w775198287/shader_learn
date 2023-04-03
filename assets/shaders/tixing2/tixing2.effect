@@ -1,0 +1,222 @@
+// Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.  
+
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: vs
+      frag: fs
+      blendState:
+        targets:
+        - blend: true
+      rasterizerState:
+        cullMode: none
+      properties:
+        texture: { value: white }
+        alphaThreshold: { value: 0.5 }
+        width: { value: 0 }
+        height: { value: 0 }
+        distanceHeight: { value: 0}
+        topx: { value: 0 }
+        topy: { value: 0 }
+        s_time: { value: 0.1 }
+}%
+
+
+CCProgram vs %{
+  precision highp float;
+
+  #include <cc-global>
+  #include <cc-local>
+
+  in vec3 a_position;
+  in vec4 a_color;
+  out vec4 v_color;
+
+  #if USE_TEXTURE
+  in vec2 a_uv0;
+  out vec2 v_uv0;
+  #endif
+
+  void main () {
+    vec4 pos = vec4(a_position, 1);
+    // vec2 point = vec2(width * .5,height * 2.);
+    // vec2 point = vec2(width/2.0 + topx, pos.y + height);
+    // pos.x += (point.x - pos.x) * (pos.y / point.y);
+    pos.x = 0.3*(pos.y - 0.1);
+
+
+    // pos.x += (point.x - pos.x) * (pos.y-(topy+height/2.0) / (point.y-height/2.0));
+
+    #if CC_USE_MODEL
+    pos = cc_matViewProj * cc_matWorld * pos;
+    #else
+    pos = cc_matViewProj * pos;
+    #endif
+
+    #if USE_TEXTURE
+    v_uv0 = a_uv0;
+    #endif
+
+    v_color = a_color;
+
+    gl_Position = pos;
+  }
+}%
+
+
+CCProgram fs %{
+  precision highp float;
+  
+  #include <alpha-test>
+
+  in vec4 v_color;
+
+  #if USE_TEXTURE
+  in vec2 v_uv0;
+  uniform sampler2D texture;
+  uniform self {
+    float width;
+    float height;
+    float distanceHeight;
+    float topx;
+    float topy;
+    float s_time;
+  }
+  #endif
+
+  float dot2(in vec2 v ) { return dot(v,v); }
+
+  // trapezoid / capped cone, specialized for Y alignment
+  float sdTrapezoid( in vec2 p, in float r1, float r2, float he )
+  {
+    vec2 k1 = vec2(r2,he);
+    vec2 k2 = vec2(r2-r1,2.0*he);
+
+	  p.x = abs(p.x);
+    vec2 ca = vec2(max(0.0,p.x-((p.y<0.0)?r1:r2)), abs(p.y)-he);
+    vec2 cb = p - k1 + k2*clamp( dot(k1-p,k2)/dot2(k2), 0.0, 1.0 );
+    
+    float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
+    
+    return s*sqrt( min(dot2(ca),dot2(cb)) );
+  }
+
+  // trapezoid / capped cone
+  float sdTrapezoid( in vec2 p, in vec2 a, in vec2 b, in float ra, float rb )
+  {
+    float rba  = rb-ra;
+    float baba = dot(b-a,b-a);
+    float papa = dot(p-a,p-a);
+    float paba = dot(p-a,b-a)/baba;
+    float x = sqrt( papa - paba*paba*baba );
+    float cax = max(0.0,x-((paba<0.5)?ra:rb));
+    float cay = abs(paba-0.5)-0.5;
+    float k = rba*rba + baba;
+    float f = clamp( (rba*(x-ra)+paba*baba)/k, 0.0, 1.0 );
+    float cbx = x-ra - f*rba;
+    float cby = paba - f;
+    float s = (cbx < 0.0 && cay < 0.0) ? -1.0 : 1.0;
+    return s*sqrt( min(cax*cax + cay*cay*baba,
+                       cbx*cbx + cby*cby*baba) );
+  }
+
+  float trapezoid(vec2 position, float halfWidth1, float halfWidth2, float halfHeight) {
+      position.x = abs(position.x);
+      position.x -= (halfWidth2 + halfWidth1) * 0.5;
+      vec2 end = vec2((halfWidth2 - halfWidth1) * 0.5, halfHeight);
+      vec2 segment = position - end * clamp(dot(position, end) / dot(end, end), -1.0, 1.0);
+      float d = length(segment);
+      if (segment.x > 0.0) {
+          return d;
+      }
+      return max(-d, abs(position.y) - halfHeight);
+  }
+
+  void main () {
+    vec4 o = vec4(1, 1, 1, 1);
+
+    #if USE_TEXTURE
+    o *= texture(texture, v_uv0);
+      #if CC_USE_ALPHA_ATLAS_TEXTURE
+      o.a *= texture2D(texture, v_uv0 + vec2(0, 0.5)).r;
+      #endif
+    #endif
+
+    o *= v_color;
+
+    ALPHA_TEST(o);
+
+    gl_FragColor = o;
+
+    float iTime = s_time;
+
+    vec2 position = v_uv0;
+    // vec2 p = v_uv0;
+
+    // float ra = 0.2+0.15*sin(iTime*1.3+0.0);
+    // float rb = 0.2+0.15*sin(iTime*1.4+1.1);
+    // vec2  pa = vec2(-0.6,0.0)+0.4*sin(iTime*1.1+vec2(0.0,2.0));
+    // vec2  pb = vec2(-0.6,0.0)+0.4*sin(iTime*1.2+vec2(1.0,2.5));
+    // vec2  pc = vec2(0.8,0.0);
+
+    // // axis aligned trapezoid
+	  // float d = sdTrapezoid( p-pc, ra, rb, 0.5+0.2*sin(1.3*iTime) );
+    // // aribitrary trapezoid
+    // // d = min( d, sdTrapezoid( p, pa, pb , ra, rb ) );
+
+    
+    // vec3 col = vec3(1.0) - sign(d)*vec3(0.1,0.4,0.7);
+    // col *= 1.0 - exp(-4.0*abs(d));
+    // col *= 0.8 + 0.2*cos(140.0*d);
+    // col = mix( col, vec3(1.0), 1.0-smoothstep(0.0,0.015,abs(d)) );
+    // col = mix( col, vec3(1.0), 1.0-smoothstep(0.0,0.005,abs(d)) );
+    // gl_FragColor = vec4(col,1.0);
+
+
+    // float halfWidth1 = 0.2 + 0.15 * sin(iTime * 1.3);
+    // float halfWidth2 = 0.2 + 0.15 * sin(iTime * 1.4 + 1.1);
+    // float halfHeight = 0.5 + 0.2 * sin(1.3 * iTime);
+    // float d = trapezoid(position, halfWidth1, halfWidth2, halfHeight);
+
+    // // same colorization that Inigo Quilez uses in his shaders
+    // vec3 color = vec3(1.0) - sign(d) * vec3(0.1, 0.4, 0.7); // base color
+    // color *= 1.0 - exp(-4.0 * abs(d)); // gradient
+	  // color *= 0.8 + 0.2 * cos(120.0 * d); // ripples
+    // color = mix(color, vec3(1.0), 1.0 - smoothstep(0.0, 3.0, (abs(d) - 0.003) * position.y));
+    
+	  // gl_FragColor = vec4(color, 1.0);
+
+
+
+    // vec2 uv = v_uv0;
+    // //Variables
+    // float sizeTop = (cos(iTime) / 2.0 + 0.5) * 0.8 + 0.2;
+    // const float sizeBottom = 1.0;
+    // //Distortion
+    // float size = mix(sizeBottom, sizeTop, uv.y);
+    // float reciprocal = 1.0 / size;
+    // uv.x = uv.x * reciprocal + (1.0 - reciprocal) / 2.0;
+    // //Texture
+    // vec4 color = texture(texture, uv );
+    // // Output to screen
+    // gl_FragColor = color;
+
+
+
+    // 4
+    float ANGLE = .2;
+    float SIZE = 1.7;
+    float BLUR = .9;
+    
+    vec2 p = (2. * o.xy - v_uv0.xy) / v_uv0.y * 2.;
+    
+    float d = max(abs(p.x)+ ANGLE * p.y, abs(p.y)) - SIZE;
+    float t = 1. - smoothstep(BLUR * .1, BLUR,d);
+	
+    // Gradient to fade out
+    
+    gl_FragColor = vec4(t);
+
+    // gl_FragColor = o;
+  }
+}%
